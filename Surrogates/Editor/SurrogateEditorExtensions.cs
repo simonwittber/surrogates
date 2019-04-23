@@ -51,6 +51,17 @@ namespace Surrogates
                     }
                 }
             }
+            foreach (var p in type.GetMethods())
+            {
+                if (p.GetParameters().Length == 0)
+                {
+                    if (p.DeclaringType == type)
+                    {
+                        if (p.DeclaringType.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length == 0)
+                            SurrogateCompiler.CreateAction(p);
+                    }
+                }
+            }
         }
 
         static bool IsSupportedType(Type t)

@@ -1,13 +1,7 @@
-using UnityEngine;
-
 namespace Surrogates
 {
-    public interface ISurrogateProperty
-    {
-        void SetComponent(Component component);
-    }
 
-    public interface ISurrogateProperty<T> : ISurrogateProperty
+    public interface ISurrogateProperty<T> : ISurrogate
     {
         T Get();
         void Set(T value);

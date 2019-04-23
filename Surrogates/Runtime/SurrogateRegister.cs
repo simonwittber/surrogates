@@ -28,5 +28,24 @@ namespace Surrogates
             if (propertyInfo == null || type == null) return;
             propertyIndex[propertyInfo] = type;
         }
+
+        static Dictionary<MethodInfo, Type> methodIndex = new Dictionary<MethodInfo, Type>();
+
+        public static ISurrogateAction GetSurrogateAction(Component target, string methodName)
+        {
+            var methodInfo = target.GetType().GetMethod(methodName);
+            Type type;
+            if (!methodIndex.TryGetValue(methodInfo, out type))
+                return new DefaultSurrogateAction(target, methodInfo);
+            var instance = (ISurrogateAction)System.Activator.CreateInstance(type);
+            instance.SetComponent(target);
+            return instance;
+        }
+
+        public static void SetSurrogateAction(MethodInfo methodInfo, Type type)
+        {
+            if (methodInfo == null || type == null) return;
+            methodIndex[methodInfo] = type;
+        }
     }
 }

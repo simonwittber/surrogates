@@ -57,15 +57,15 @@ namespace Surrogates
             typeBuilder.AddInterfaceImplementation(itype);
             var componentField = typeBuilder.DefineField("_component", pi.DeclaringType, FieldAttributes.Public);
 
-            CreateRegisterMethod(pi, typeBuilder, componentField);
-            CreateSetComponentMethod(pi, typeBuilder, componentField);
+            CreateRegisterMethod(pi.DeclaringType, pi.Name, typeBuilder, componentField);
+            CreateSetComponentMethod(pi.DeclaringType, typeBuilder, componentField);
             CreateSetMethod(pi, typeBuilder, componentField, itype);
             CreateGetMethod(pi, typeBuilder, componentField, itype);
 
             return typeBuilder.CreateType();
         }
 
-        static void CreateRegisterMethod(PropertyInfo pi, TypeBuilder typeBuilder, FieldBuilder componentField)
+        static void CreateRegisterMethod(Type declaringType, string name, TypeBuilder typeBuilder, FieldBuilder componentField)
         {
             var mb = typeBuilder.DefineMethod("AddToRegister", MethodAttributes.Static, typeof(void), null);
             var ctorParams = new Type[] { typeof(RuntimeInitializeLoadType) };
@@ -73,9 +73,9 @@ namespace Surrogates
             var cab = new CustomAttributeBuilder(classCtorInfo, new object[] { RuntimeInitializeLoadType.BeforeSceneLoad });
             mb.SetCustomAttribute(cab);
             var il = mb.GetILGenerator();
-            il.Emit(OpCodes.Ldtoken, pi.DeclaringType);
+            il.Emit(OpCodes.Ldtoken, declaringType);
             il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
-            il.Emit(OpCodes.Ldstr, pi.Name);
+            il.Emit(OpCodes.Ldstr, name);
             il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetProperty", new Type[] { typeof(string) }));
             il.Emit(OpCodes.Ldtoken, typeBuilder);
             il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
@@ -83,16 +83,16 @@ namespace Surrogates
             il.Emit(OpCodes.Ret);
         }
 
-        static void CreateSetComponentMethod(PropertyInfo pi, TypeBuilder typeBuilder, FieldBuilder componentField)
+        static void CreateSetComponentMethod(Type declaringType, TypeBuilder typeBuilder, FieldBuilder componentField)
         {
             var mb = typeBuilder.DefineMethod("SetComponent", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), new Type[] { typeof(Component) });
             var il = mb.GetILGenerator();
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Castclass, pi.DeclaringType);
+            il.Emit(OpCodes.Castclass, declaringType);
             il.Emit(OpCodes.Stfld, componentField);
             il.Emit(OpCodes.Ret);
-            typeBuilder.DefineMethodOverride(mb, typeof(ISurrogateProperty).GetMethod("SetComponent"));
+            typeBuilder.DefineMethodOverride(mb, typeof(ISurrogate).GetMethod("SetComponent"));
         }
 
         static void CreateSetMethod(PropertyInfo pi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
@@ -134,6 +134,52 @@ namespace Surrogates
                 il.Emit(OpCodes.Ret);
             }
             typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Get"));
+        }
+
+        public static Type CreateAction(MethodInfo mi)
+        {
+
+            var className = "_" + mi.DeclaringType.Name + "_" + mi.Name;
+
+            // Debug.Log("Creating Class: " + className);
+            TypeBuilder typeBuilder;
+            try
+            {
+                typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public);
+            }
+            catch (ArgumentException)
+            {
+                Debug.Log("Duplicate:" + className);
+                return null;
+            }
+            var itype = typeof(ISurrogateAction);
+            typeBuilder.AddInterfaceImplementation(itype);
+            var componentField = typeBuilder.DefineField("_component", mi.DeclaringType, FieldAttributes.Public);
+
+            CreateRegisterMethod(mi.DeclaringType, mi.Name, typeBuilder, componentField);
+            CreateSetComponentMethod(mi.DeclaringType, typeBuilder, componentField);
+            CreateInvokeMethod(mi, typeBuilder, componentField, itype);
+
+            return typeBuilder.CreateType();
+        }
+
+        static void CreateInvokeMethod(MethodInfo mi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
+        {
+            var mb = typeBuilder.DefineMethod("Invoke", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), null);
+            var il = mb.GetILGenerator();
+            if (mi == null)
+            {
+                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
+                il.Emit(OpCodes.Throw);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, componentField);
+                il.Emit(OpCodes.Callvirt, mi);
+                il.Emit(OpCodes.Ret);
+            }
+            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Invoke"));
         }
 
 
