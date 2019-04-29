@@ -42,25 +42,21 @@ namespace Surrogates
         {
             foreach (var p in type.GetProperties())
             {
-                if (IsSupportedType(p.PropertyType))
-                {
-                    if (p.DeclaringType == type)
-                    {
-                        if (p.DeclaringType.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length == 0)
-                            SurrogateCompiler.CreateProperty(p);
-                    }
-                }
+                if (!IsSupportedType(p.PropertyType)) continue;
+                if (p.DeclaringType != type) continue;
+                if (p.DeclaringType.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length > 0) continue;
+                if (p.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length > 0) continue;
+                SurrogateCompiler.CreateProperty(p);
             }
-            foreach (var p in type.GetMethods())
+
+            foreach (var m in type.GetMethods())
             {
-                if (p.GetParameters().Length == 0)
-                {
-                    if (p.DeclaringType == type)
-                    {
-                        if (p.DeclaringType.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length == 0)
-                            SurrogateCompiler.CreateAction(p);
-                    }
-                }
+                if (m.GetParameters().Length > 0) continue;
+                if (m.DeclaringType != type) continue;
+                if (m.IsSpecialName) continue;
+                if (m.DeclaringType.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length > 0) continue;
+                if (m.GetCustomAttributes(typeof(ObsoleteAttribute), true).Length > 0) continue;
+                SurrogateCompiler.CreateAction(m);
             }
         }
 

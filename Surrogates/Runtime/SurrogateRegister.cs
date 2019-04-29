@@ -23,6 +23,17 @@ namespace Surrogates
             return instance;
         }
 
+        public static ISurrogateAction GetSurrogateAction(Type type, string methodName)
+        {
+            var methodInfo = type.GetMethod(methodName);
+            if (methodInfo == null) throw new ArgumentException("Method Not Found:" + methodName);
+            Type t;
+            if (!methodIndex.TryGetValue(methodInfo, out t))
+                return new DefaultSurrogateAction(type, methodInfo);
+            var instance = (ISurrogateAction)System.Activator.CreateInstance(t);
+            return instance;
+        }
+
         public static void SetSurrogate(PropertyInfo propertyInfo, Type type)
         {
             if (propertyInfo == null || type == null) return;
@@ -33,16 +44,12 @@ namespace Surrogates
 
         public static ISurrogateAction GetSurrogateAction(Component target, string methodName)
         {
-            var methodInfo = target.GetType().GetMethod(methodName);
-            Type type;
-            if (!methodIndex.TryGetValue(methodInfo, out type))
-                return new DefaultSurrogateAction(target, methodInfo);
-            var instance = (ISurrogateAction)System.Activator.CreateInstance(type);
+            var instance = GetSurrogateAction(target.GetType(), methodName);
             instance.SetComponent(target);
             return instance;
         }
 
-        public static void SetSurrogateAction(MethodInfo methodInfo, Type type)
+        public static void SetSurrogate(MethodInfo methodInfo, Type type)
         {
             if (methodInfo == null || type == null) return;
             methodIndex[methodInfo] = type;

@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using UnityEngine;
 
@@ -7,6 +8,7 @@ namespace Surrogates
     {
         MethodInfo _methodInfo;
         Component _component;
+        Type _type;
 
         public DefaultSurrogateAction(Component target, MethodInfo propertyInfo)
         {
@@ -14,10 +16,18 @@ namespace Surrogates
             _methodInfo = propertyInfo;
         }
 
+        public DefaultSurrogateAction(Type type, MethodInfo methodInfo)
+        {
+            _type = type;
+            _methodInfo = methodInfo;
+        }
+
         public void Invoke()
         {
             if (_component != null)
                 _methodInfo.Invoke(_component, null);
+            else
+                _methodInfo.Invoke(null, null);
         }
 
         public void SetComponent(Component component)
