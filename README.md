@@ -22,6 +22,7 @@ You can also access Action methods:
     myAction.Invoke();
 
 You can also use Surrogates to magically create batched Update methods.
+
     public class AnUpdateBatchedComponent : SystemBehaviour<AnUpdateBatchedComponent>
     {
         //This gets called once per frame, regardless of number of components in the scene.
