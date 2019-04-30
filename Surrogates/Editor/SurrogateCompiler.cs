@@ -1,4 +1,3 @@
-using UnityEditor;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
@@ -7,7 +6,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using UnityEngine.Scripting;
-using TMPro;
+using UnityEditor;
 
 namespace Surrogates
 {
@@ -24,14 +23,15 @@ namespace Surrogates
             var asmName = new AssemblyName();
             asmName.Name = assemblyName;
             assemblyFileName = assemblyName + ".dll";
-            assemblyBuilder = domain.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndSave, "./Assets/");
+            var path = System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(SurrogateRegister.Instance));
+            assemblyBuilder = domain.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndSave, path);
             var classCtorInfo = typeof(PreserveAttribute).GetConstructor(Type.EmptyTypes);
             var caBuilder = new CustomAttributeBuilder(classCtorInfo, new object[] { });
             assemblyBuilder.SetCustomAttribute(caBuilder);
             moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName, assemblyFileName, false);
         }
 
-        internal static void Save()
+        public static void Save()
         {
             assemblyBuilder.Save(assemblyFileName);
         }

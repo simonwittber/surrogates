@@ -14,7 +14,7 @@ namespace Surrogates
             "UnityEngine.VRModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
         };
 
-        [MenuItem("Assets/Create/Surrogate Assembly")]
+        [MenuItem("Assets/Surrogate Assembly")]
         static void BuildSurrogateDLL()
         {
             Rebuild();
@@ -22,7 +22,40 @@ namespace Surrogates
             AssetDatabase.Refresh();
         }
 
+        [RuntimeInitializeOnLoadMethod]
+        public static void WaitForChanges()
+        {
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+            {
+                if (SurrogateRegister.isDirty)
+                {
+                    Rebuild();
+                    SurrogateRegister.isDirty = false;
+                }
+            }
+        }
+
         public static void Rebuild()
+        {
+            foreach (var i in SurrogateRegister.methodIndex)
+            {
+                SurrogateCompiler.CreateAction(i.Key);
+            }
+            foreach (var i in SurrogateRegister.propertyIndex)
+            {
+                SurrogateCompiler.CreateProperty(i.Key);
+            }
+            SurrogateCompiler.Save();
+            AssetDatabase.Refresh();
+        }
+
+        public static void BuildEverything()
         {
             foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
             {

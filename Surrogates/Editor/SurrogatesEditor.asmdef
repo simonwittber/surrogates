@@ -1,0 +1,17 @@
+{
+    "name": "SurrogatesEditor",
+    "references": [
+        "GUID:e2d5ea5e5381242f3b8c81c515329688"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}
