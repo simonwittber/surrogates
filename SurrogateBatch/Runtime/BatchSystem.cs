@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Surrogates;
 using UnityEngine;
 
@@ -9,7 +10,9 @@ namespace Surrogates
     {
         static GameObject container;
         static BatchSystem system;
+        static bool isDirty;
 
+        public string[] systems;
         HashSet<Type> types = new HashSet<Type>();
         List<ISurrogateAction> methods = new List<ISurrogateAction>();
 
@@ -28,12 +31,18 @@ namespace Surrogates
                 var action = SurrogateRegister.GetSurrogateAction(typeof(T), "UpdateBatch");
                 system.types.Add(typeof(T));
                 system.methods.Add(action);
+                isDirty = true;
             }
             return system;
         }
 
         void Update()
         {
+            if (Application.isEditor && isDirty)
+            {
+                systems = (from i in methods select i.GetType().Name).ToArray();
+                isDirty = false;
+            }
             foreach (var i in methods) i.Invoke();
         }
     }
