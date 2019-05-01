@@ -1,7 +1,7 @@
 {
     "name": "SurrogateBatchAssembly",
     "references": [
-        "GUID:e2d5ea5e5381242f3b8c81c515329688"
+        "GUID:7a6adc924f8214548818694725c7dead"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],
