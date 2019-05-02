@@ -44,13 +44,11 @@ namespace Surrogates
         public static void Rebuild()
         {
             foreach (var i in SurrogateRegister.methodIndex)
-            {
                 SurrogateCompiler.CreateAction(i.Key);
-            }
             foreach (var i in SurrogateRegister.propertyIndex)
-            {
                 SurrogateCompiler.CreateProperty(i.Key);
-            }
+            foreach (var i in SurrogateRegister.fieldIndex)
+                SurrogateCompiler.CreateField(i.Key);
             SurrogateCompiler.Save();
             AssetDatabase.Refresh();
         }

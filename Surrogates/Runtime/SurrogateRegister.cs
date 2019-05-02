@@ -17,6 +17,7 @@ namespace Surrogates
         public int size;
         public static bool isDirty;
         public static Dictionary<PropertyInfo, Type> propertyIndex = new Dictionary<PropertyInfo, Type>();
+        public static Dictionary<FieldInfo, Type> fieldIndex = new Dictionary<FieldInfo, Type>();
         public static Dictionary<MethodInfo, Type> methodIndex = new Dictionary<MethodInfo, Type>();
         public static SurrogateRegister Instance { get; private set; }
 
@@ -30,6 +31,22 @@ namespace Surrogates
             {
                 isDirty = true;
                 return new DefaultSurrogateProperty<T>(target, propertyInfo);
+            }
+            var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(type);
+            instance.SetComponent(target);
+            return instance;
+        }
+
+        public static ISurrogateProperty<T> GetSurrogateField<T>(Component target, string fieldName)
+        {
+            var fieldInfo = target.GetType().GetField(fieldName);
+            Type type;
+            if (!fieldIndex.TryGetValue(fieldInfo, out type))
+                fieldIndex[fieldInfo] = null;
+            if (type == null)
+            {
+                isDirty = true;
+                return new DefaultSurrogateField<T>(target, fieldInfo);
             }
             var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(type);
             instance.SetComponent(target);

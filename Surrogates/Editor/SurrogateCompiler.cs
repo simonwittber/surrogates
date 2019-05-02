@@ -37,6 +37,53 @@ namespace Surrogates
         }
 
 
+        public static Type CreateField(FieldInfo fi)
+        {
+            try
+            {
+                fi = fi.DeclaringType.GetField(fi.Name);
+            }
+            catch (AmbiguousMatchException)
+            {
+                return null;
+            }
+
+            var className = "_" + fi.DeclaringType.Name + "_" + fi.Name;
+
+            // Debug.Log("Creating Class: " + className);
+            TypeBuilder typeBuilder;
+            try
+            {
+                typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public);
+            }
+            catch (ArgumentException)
+            {
+                Debug.Log("Duplicate:" + className);
+                return null;
+            }
+            var itype = typeof(ISurrogateProperty<>).MakeGenericType(fi.FieldType);
+            typeBuilder.AddInterfaceImplementation(itype);
+
+
+
+            CreatePropertyRegisterMethod(fi.DeclaringType, fi.Name, typeBuilder);
+            if (fi.IsStatic)
+            {
+                CreateSetComponentMethod(fi.DeclaringType, typeBuilder, null);
+                CreateSetMethod(fi, typeBuilder, null, itype);
+                CreateGetMethod(fi, typeBuilder, null, itype);
+            }
+            else
+            {
+                var componentField = typeBuilder.DefineField("_component", fi.DeclaringType, FieldAttributes.Public);
+                CreateSetComponentMethod(fi.DeclaringType, typeBuilder, componentField);
+                CreateSetMethod(fi, typeBuilder, componentField, itype);
+                CreateGetMethod(fi, typeBuilder, componentField, itype);
+            }
+            return typeBuilder.CreateType();
+        }
+
+
         public static Type CreateProperty(PropertyInfo pi)
         {
             try
@@ -269,6 +316,49 @@ namespace Surrogates
             il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
             il.Emit(OpCodes.Call, typeof(SurrogateRegister).GetMethod("SetSurrogate", new[] { typeof(MethodInfo), typeof(Type) }));
             il.Emit(OpCodes.Ret);
+        }
+
+        static void CreateSetMethod(FieldInfo fi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
+        {
+            var mb = typeBuilder.DefineMethod("Set", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), new Type[] { fi.FieldType });
+
+            var il = mb.GetILGenerator();
+            if (fi.IsStatic)
+            {
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Stsfld, fi);
+                il.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, componentField);
+                il.Emit(OpCodes.Ldarg_1);
+                il.Emit(OpCodes.Stfld, fi);
+                il.Emit(OpCodes.Ret);
+            }
+            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Set"));
+        }
+
+        static void CreateGetMethod(FieldInfo fi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
+        {
+            var mb = typeBuilder.DefineMethod("Get", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, fi.FieldType, null);
+            var il = mb.GetILGenerator();
+
+            if (fi.IsStatic)
+            {
+                il.Emit(OpCodes.Ldsfld, fi);
+                il.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, componentField);
+                il.Emit(OpCodes.Ldfld, fi);
+                il.Emit(OpCodes.Ret);
+            }
+
+            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Get"));
         }
     }
 }
