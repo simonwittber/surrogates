@@ -1,126 +1,193 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Threading;
 using UnityEngine;
+using DifferentMethods.Extensions.Serialization;
+using System.Linq;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace Surrogates
 {
+    [ExecuteAlways]
     [CreateAssetMenu]
     public class SurrogateRegister : ScriptableObject, ISerializationCallbackReceiver
     {
-        public int count;
-        public int size;
-        public static bool isDirty;
-        public static Dictionary<PropertyInfo, Type> propertyIndex = new Dictionary<PropertyInfo, Type>();
-        public static Dictionary<FieldInfo, Type> fieldIndex = new Dictionary<FieldInfo, Type>();
-        public static Dictionary<MethodInfo, Type> methodIndex = new Dictionary<MethodInfo, Type>();
-        public static SurrogateRegister Instance { get; private set; }
+        public Dictionary<PropertyInfo, string> propertyIndex = new Dictionary<PropertyInfo, string>();
+        public Dictionary<FieldInfo, string> fieldIndex = new Dictionary<FieldInfo, string>();
+        public Dictionary<MethodInfo, string> methodIndex = new Dictionary<MethodInfo, string>();
 
-        public static ISurrogateProperty<T> GetSurrogateProperty<T>(Component target, string propertyName)
+        public HashSet<MethodInfo> missingMethods = new HashSet<MethodInfo>();
+        public HashSet<FieldInfo> missingFields = new HashSet<FieldInfo>();
+        public HashSet<PropertyInfo> missingProperties = new HashSet<PropertyInfo>();
+
+        [SerializeField] byte[] serializationBytes;
+
+        static SurrogateRegister _instance;
+        public static SurrogateRegister Instance
         {
-            var propertyInfo = target.GetType().GetProperty(propertyName);
-            Type type;
-            if (!propertyIndex.TryGetValue(propertyInfo, out type))
-                propertyIndex[propertyInfo] = null;
-            if (type == null)
+            get
             {
-                isDirty = true;
-                return new DefaultSurrogateProperty<T>(target, propertyInfo);
+                if (!_instance)
+                    _instance = Resources.FindObjectsOfTypeAll<SurrogateRegister>().FirstOrDefault();
+                return _instance;
             }
-            var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(type);
-            instance.SetComponent(target);
-            return instance;
         }
 
-        public static ISurrogateProperty<T> GetSurrogateField<T>(Component target, string fieldName)
+        public ISurrogateProperty<T> GetSurrogateField<T>(Component target, FieldInfo fieldInfo)
         {
-            var fieldInfo = target.GetType().GetField(fieldName);
-            Type type;
+            string type;
             if (!fieldIndex.TryGetValue(fieldInfo, out type))
                 fieldIndex[fieldInfo] = null;
             if (type == null)
             {
-                isDirty = true;
+                UnityEngine.Debug.Log("Missing: " + fieldInfo.DeclaringType.Name);
+                Instance.missingFields.Add(fieldInfo);
                 return new DefaultSurrogateField<T>(target, fieldInfo);
             }
-            var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(type);
-            instance.SetComponent(target);
-            return instance;
-        }
-
-        public static ISurrogateAction GetSurrogateAction(Type type, string methodName)
-        {
-            var methodInfo = type.GetMethod(methodName);
-            if (methodInfo == null) throw new ArgumentException("Method Not Found:" + methodName);
-            Type t;
-            if (!methodIndex.TryGetValue(methodInfo, out t))
-                methodIndex[methodInfo] = null;
-            if (t == null)
+            var surrogateType = Type.GetType(type);
+            if (surrogateType == null)
             {
-                isDirty = true;
-                return new DefaultSurrogateAction(type, methodInfo);
+                fieldIndex[fieldInfo] = null;
+                UnityEngine.Debug.Log("Missing: " + fieldInfo.DeclaringType.Name);
+                Instance.missingFields.Add(fieldInfo);
+                return new DefaultSurrogateField<T>(target, fieldInfo);
             }
-            var instance = (ISurrogateAction)System.Activator.CreateInstance(t);
-            return instance;
-        }
-
-        public static void SetSurrogate(PropertyInfo propertyInfo, Type type)
-        {
-            if (propertyInfo == null || type == null) return;
-            propertyIndex[propertyInfo] = type;
-        }
-
-        public static ISurrogateAction GetSurrogateAction(Component target, string methodName)
-        {
-            var instance = GetSurrogateAction(target.GetType(), methodName);
+            var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(surrogateType);
             instance.SetComponent(target);
             return instance;
         }
 
-        public static void SetSurrogate(MethodInfo methodInfo, Type type)
+        public ISurrogateProperty<T> GetSurrogateProperty<T>(Component target, PropertyInfo propertyInfo)
         {
-            if (methodInfo == null || type == null) return;
-            methodIndex[methodInfo] = type;
+            string type;
+            if (!propertyIndex.TryGetValue(propertyInfo, out type))
+                propertyIndex[propertyInfo] = null;
+            if (type == null)
+            {
+                UnityEngine.Debug.Log("Missing: " + propertyInfo.DeclaringType.Name);
+                Instance.missingProperties.Add(propertyInfo);
+                return new DefaultSurrogateProperty<T>(target, propertyInfo);
+            }
+            var surrogateType = Type.GetType(type);
+            if (surrogateType == null)
+            {
+                propertyIndex[propertyInfo] = null;
+                UnityEngine.Debug.Log("Missing: " + propertyInfo.DeclaringType.Name);
+                Instance.missingProperties.Add(propertyInfo);
+                return new DefaultSurrogateProperty<T>(target, propertyInfo);
+            }
+            var instance = (ISurrogateProperty<T>)System.Activator.CreateInstance(surrogateType);
+            instance.SetComponent(target);
+            return instance;
+        }
+
+        public ISurrogateAction GetSurrogateAction(MethodInfo methodInfo)
+        {
+            if (methodInfo == null) return null;
+            string type;
+            if (!methodIndex.TryGetValue(methodInfo, out type))
+                methodIndex[methodInfo] = null;
+            if (type == null)
+            {
+                UnityEngine.Debug.Log($"Missing: {methodInfo.DeclaringType.Name} {methodInfo.Name}");
+                Instance.missingMethods.Add(methodInfo);
+                return new DefaultSurrogateAction(methodInfo.DeclaringType, methodInfo);
+            }
+            var surrogateType = Type.GetType(type);
+            if (surrogateType == null)
+            {
+                methodIndex[methodInfo] = null;
+                UnityEngine.Debug.Log($"Missing: {methodInfo.DeclaringType.Name} {methodInfo.Name}");
+                Instance.missingMethods.Add(methodInfo);
+                return new DefaultSurrogateAction(methodInfo.DeclaringType, methodInfo);
+            }
+            var instance = (ISurrogateAction)System.Activator.CreateInstance(surrogateType);
+            return instance;
+        }
+
+        public ISurrogateAction GetSurrogateAction(Component target, MethodInfo methodInfo)
+        {
+            var instance = GetSurrogateAction(methodInfo);
+            if (instance == null) return null;
+            instance.SetComponent(target);
+            return instance;
+        }
+
+        public void SetSurrogate(PropertyInfo propertyInfo, Type type)
+        {
+            if (propertyInfo == null || type == null)
+            {
+                UnityEngine.Debug.LogError($"Invalid Register Call: {propertyInfo} {type}");
+                return;
+            }
+            propertyIndex[propertyInfo] = type.AssemblyQualifiedName;
+        }
+
+        public void SetSurrogate(MethodInfo methodInfo, Type type)
+        {
+            if (methodInfo == null || type == null)
+            {
+                UnityEngine.Debug.LogError($"Invalid Register Call: {methodInfo} {type}");
+                return;
+            }
+            methodIndex[methodInfo] = type.AssemblyQualifiedName;
+        }
+
+        public void SetSurrogate(FieldInfo fieldInfo, Type type)
+        {
+            if (fieldInfo == null || type == null)
+            {
+                UnityEngine.Debug.LogError($"Invalid Register Call: {fieldInfo} {type}");
+                return;
+            }
+            fieldIndex[fieldInfo] = type.AssemblyQualifiedName;
         }
 
         public void OnBeforeSerialize()
         {
-            var bf = new BinaryFormatter();
-            var s = new SerializationContainer() { propertyIndex = propertyIndex, methodIndex = methodIndex };
+            var sc = new SerializationContainer()
+            {
+                methods = missingMethods.ToList(),
+                fields = missingFields.ToList(),
+                properties = missingProperties.ToList(),
+                methodIndex = methodIndex,
+                fieldIndex = fieldIndex,
+                propertyIndex = propertyIndex
+            };
             using (var ms = new MemoryStream())
             {
-                bf.Serialize(ms, s);
+                var bf = new BinaryFormatter();
+                bf.Serialize(ms, sc);
                 serializationBytes = ms.ToArray();
             }
-            size = serializationBytes.Length;
-            count = propertyIndex.Count + methodIndex.Count;
         }
 
         public void OnAfterDeserialize()
         {
-            if (serializationBytes == null) return;
-            var bf = new BinaryFormatter();
             using (var ms = new MemoryStream(serializationBytes))
             {
-                var s = (SerializationContainer)bf.Deserialize(ms);
-                methodIndex = s.methodIndex;
-                propertyIndex = s.propertyIndex;
+                var bf = new BinaryFormatter();
+                var sc = (SerializationContainer)bf.Deserialize(ms);
+                missingFields = new HashSet<FieldInfo>(sc.fields);
+                missingMethods = new HashSet<MethodInfo>(sc.methods);
+                missingProperties = new HashSet<PropertyInfo>(sc.properties);
+                methodIndex = new Dictionary<MethodInfo, string>(sc.methodIndex);
+                fieldIndex = new Dictionary<FieldInfo, string>(sc.fieldIndex);
+                propertyIndex = new Dictionary<PropertyInfo, string>(sc.propertyIndex);
             }
-            Instance = this;
         }
 
         [Serializable]
         struct SerializationContainer
         {
-            public Dictionary<PropertyInfo, Type> propertyIndex;
-            public Dictionary<MethodInfo, Type> methodIndex;
+            public List<MethodInfo> methods;
+            public List<FieldInfo> fields;
+            public List<PropertyInfo> properties;
+            public Dictionary<PropertyInfo, string> propertyIndex;
+            public Dictionary<FieldInfo, string> fieldIndex;
+            public Dictionary<MethodInfo, string> methodIndex;
         }
 
-        [SerializeField] byte[] serializationBytes;
     }
 }

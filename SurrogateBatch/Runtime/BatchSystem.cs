@@ -28,10 +28,13 @@ namespace Surrogates
                 system = container.AddComponent<BatchSystem>();
             if (!system.types.Contains(typeof(T)))
             {
-                var action = SurrogateRegister.GetSurrogateAction(typeof(T), "UpdateBatch");
-                system.types.Add(typeof(T));
-                system.methods.Add(action);
-                isDirty = true;
+                var action = SurrogateRegister.Instance.GetSurrogateAction(typeof(T).GetMethod("UpdateBatch"));
+                if (action != null)
+                {
+                    system.types.Add(typeof(T));
+                    system.methods.Add(action);
+                    isDirty = true;
+                }
             }
             return system;
         }

@@ -10,355 +10,132 @@ using UnityEditor;
 
 namespace Surrogates
 {
-    public static class SurrogateCompiler
+    public static class SurrogateCompilerCS
     {
         static string assemblyName = "Xyzzy.Surrogate";
         static string assemblyFileName;
-        static ModuleBuilder moduleBuilder;
-        static AssemblyBuilder assemblyBuilder;
 
-        static SurrogateCompiler()
+        static Dictionary<string, string> propertyIndex;
+        static Dictionary<string, string> methodIndex;
+        static Dictionary<string, string> fieldIndex;
+
+        static SurrogateCompilerCS()
         {
-            var domain = Thread.GetDomain();
-            var asmName = new AssemblyName();
-            asmName.Name = assemblyName;
-            assemblyFileName = assemblyName + ".dll";
-            var path = System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(SurrogateRegister.Instance));
-            assemblyBuilder = domain.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndSave, path);
-            var classCtorInfo = typeof(PreserveAttribute).GetConstructor(Type.EmptyTypes);
-            var caBuilder = new CustomAttributeBuilder(classCtorInfo, new object[] { });
-            assemblyBuilder.SetCustomAttribute(caBuilder);
-            moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName, assemblyFileName, false);
+            propertyIndex = new Dictionary<string, string>();
+            fieldIndex = new Dictionary<string, string>();
+            methodIndex = new Dictionary<string, string>();
         }
 
         public static void Save()
         {
-            assemblyBuilder.Save(assemblyFileName);
-        }
+            var assetPath = System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(SurrogateRegister.Instance));
 
-
-        public static Type CreateField(FieldInfo fi)
-        {
-            try
+            foreach (var kv in propertyIndex)
             {
-                fi = fi.DeclaringType.GetField(fi.Name);
-            }
-            catch (AmbiguousMatchException)
-            {
-                return null;
-            }
-
-            var className = "_" + fi.DeclaringType.Name + "_" + fi.Name;
-
-            // Debug.Log("Creating Class: " + className);
-            TypeBuilder typeBuilder;
-            try
-            {
-                typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public);
-            }
-            catch (ArgumentException)
-            {
-                Debug.Log("Duplicate:" + className);
-                return null;
-            }
-            var itype = typeof(ISurrogateProperty<>).MakeGenericType(fi.FieldType);
-            typeBuilder.AddInterfaceImplementation(itype);
-
-
-
-            CreatePropertyRegisterMethod(fi.DeclaringType, fi.Name, typeBuilder);
-            if (fi.IsStatic)
-            {
-                CreateSetComponentMethod(fi.DeclaringType, typeBuilder, null);
-                CreateSetMethod(fi, typeBuilder, null, itype);
-                CreateGetMethod(fi, typeBuilder, null, itype);
-            }
-            else
-            {
-                var componentField = typeBuilder.DefineField("_component", fi.DeclaringType, FieldAttributes.Public);
-                CreateSetComponentMethod(fi.DeclaringType, typeBuilder, componentField);
-                CreateSetMethod(fi, typeBuilder, componentField, itype);
-                CreateGetMethod(fi, typeBuilder, componentField, itype);
-            }
-            return typeBuilder.CreateType();
-        }
-
-
-        public static Type CreateProperty(PropertyInfo pi)
-        {
-            try
-            {
-                pi = pi.DeclaringType.GetProperty(pi.Name);
-            }
-            catch (AmbiguousMatchException)
-            {
-                return null;
-            }
-
-            var className = "_" + pi.DeclaringType.Name + "_" + pi.Name;
-
-            // Debug.Log("Creating Class: " + className);
-            TypeBuilder typeBuilder;
-            try
-            {
-                typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public);
-            }
-            catch (ArgumentException)
-            {
-                Debug.Log("Duplicate:" + className);
-                return null;
-            }
-            var itype = typeof(ISurrogateProperty<>).MakeGenericType(pi.PropertyType);
-            typeBuilder.AddInterfaceImplementation(itype);
-
-
-
-            CreatePropertyRegisterMethod(pi.DeclaringType, pi.Name, typeBuilder);
-            if (pi.GetGetMethod().IsStatic)
-            {
-                CreateSetComponentMethod(pi.DeclaringType, typeBuilder, null);
-                CreateSetMethod(pi, typeBuilder, null, itype);
-                CreateGetMethod(pi, typeBuilder, null, itype);
-            }
-            else
-            {
-                var componentField = typeBuilder.DefineField("_component", pi.DeclaringType, FieldAttributes.Public);
-                CreateSetComponentMethod(pi.DeclaringType, typeBuilder, componentField);
-                CreateSetMethod(pi, typeBuilder, componentField, itype);
-                CreateGetMethod(pi, typeBuilder, componentField, itype);
-            }
-            return typeBuilder.CreateType();
-        }
-
-        static void CreatePropertyRegisterMethod(Type declaringType, string name, TypeBuilder typeBuilder)
-        {
-            var mb = typeBuilder.DefineMethod("AddToRegister", MethodAttributes.Static, typeof(void), null);
-            var ctorParams = new Type[] { typeof(RuntimeInitializeLoadType) };
-            var classCtorInfo = typeof(RuntimeInitializeOnLoadMethodAttribute).GetConstructor(ctorParams);
-            var cab = new CustomAttributeBuilder(classCtorInfo, new object[] { RuntimeInitializeLoadType.BeforeSceneLoad });
-            mb.SetCustomAttribute(cab);
-            var il = mb.GetILGenerator();
-            il.Emit(OpCodes.Ldtoken, declaringType);
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
-            il.Emit(OpCodes.Ldstr, name);
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetProperty", new Type[] { typeof(string) }));
-            il.Emit(OpCodes.Ldtoken, typeBuilder);
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
-            il.Emit(OpCodes.Call, typeof(SurrogateRegister).GetMethod("SetSurrogate", new[] { typeof(PropertyInfo), typeof(Type) }));
-            il.Emit(OpCodes.Ret);
-        }
-
-        static void CreateSetComponentMethod(Type declaringType, TypeBuilder typeBuilder, FieldBuilder componentField)
-        {
-            var mb = typeBuilder.DefineMethod("SetComponent", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), new Type[] { typeof(Component) });
-            var il = mb.GetILGenerator();
-            if (componentField == null)
-            {
-                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
-                il.Emit(OpCodes.Throw);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldarg_1);
-                il.Emit(OpCodes.Castclass, declaringType);
-                il.Emit(OpCodes.Stfld, componentField);
-                il.Emit(OpCodes.Ret);
-            }
-            typeBuilder.DefineMethodOverride(mb, typeof(ISurrogate).GetMethod("SetComponent"));
-        }
-
-        static void CreateSetMethod(PropertyInfo pi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
-        {
-            var mb = typeBuilder.DefineMethod("Set", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), new Type[] { pi.PropertyType });
-            var setMethod = pi.GetSetMethod();
-            var il = mb.GetILGenerator();
-            if (setMethod == null)
-            {
-                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
-                il.Emit(OpCodes.Throw);
-            }
-            else
-            {
-                if (setMethod.IsStatic)
+                var path = System.IO.Path.Combine(assetPath, kv.Key + ".cs");
+                using (var output = System.IO.File.OpenWrite(path))
                 {
-                    il.Emit(OpCodes.Ldarg_1);
-                    il.Emit(OpCodes.Call, setMethod);
-                    il.Emit(OpCodes.Ret);
-                }
-                else
-                {
-                    il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Ldfld, componentField);
-                    il.Emit(OpCodes.Ldarg_1);
-                    il.Emit(OpCodes.Callvirt, setMethod);
-                    il.Emit(OpCodes.Ret);
+                    using (var tw = new System.IO.StreamWriter(output))
+                    {
+                        tw.Write(kv.Value);
+                        tw.Flush();
+                    }
+
                 }
             }
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Set"));
+
         }
 
-        static void CreateGetMethod(PropertyInfo pi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
+        public static string CreateField(FieldInfo fi)
         {
-            var mb = typeBuilder.DefineMethod("Get", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, pi.PropertyType, null);
-            var il = mb.GetILGenerator();
-            var getMethod = pi.GetGetMethod();
-            if (getMethod == null)
-            {
-                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
-                il.Emit(OpCodes.Throw);
-            }
-            else
-            {
-                if (getMethod.IsStatic)
-                {
-                    il.Emit(OpCodes.Call, getMethod);
-                    il.Emit(OpCodes.Ret);
-                }
-                else
-                {
-                    il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Ldfld, componentField);
-                    il.Emit(OpCodes.Callvirt, getMethod);
-                    il.Emit(OpCodes.Ret);
-                }
-            }
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Get"));
+            var template = $@"
+    [System.Serializable]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public class {fi.DeclaringType.Name}_{fi.Name} : ISurrogateProperty<{fi.FieldType.Name}> {{
+        Component component;
+        public void SetComponent(Component component) => this.component = component;
+        public {fi.FieldType.Name} Get() => component.{fi.Name};
+        public {fi.FieldType.Name} Set({fi.FieldType.Name} value) => component.{fi.Name} = value;
+    }}
+            ";
+            // fieldIndex[fi] = template;
+            return template;
         }
 
-        public static Type CreateAction(MethodInfo mi)
+
+        public static string CreateProperty(PropertyInfo pi)
         {
-            mi = mi.DeclaringType.GetMethod(mi.Name, new Type[] { });
-            var className = "_" + mi.DeclaringType.Name + "_" + mi.Name;
-            TypeBuilder typeBuilder;
-            try
-            {
-                typeBuilder = moduleBuilder.DefineType(className, TypeAttributes.Public);
-            }
-            catch (ArgumentException)
-            {
-                Debug.Log("Duplicate:" + className);
-                return null;
-            }
-            var itype = typeof(ISurrogateAction);
-            typeBuilder.AddInterfaceImplementation(itype);
-            mi.DeclaringType.GetMethod(mi.Name, new Type[] { });
-            CreateActionRegisterMethod(mi.DeclaringType, mi.Name, typeBuilder);
-
-            if (mi.IsStatic)
-            {
-                CreateSetComponentMethod(mi.DeclaringType, typeBuilder, null);
-                CreateStaticInvokeMethod(mi, typeBuilder, itype);
-            }
-            else
-            {
-                // Debug.Log("Creating Class: " + className);
-                var componentField = typeBuilder.DefineField("_component", mi.DeclaringType, FieldAttributes.Public);
-                CreateSetComponentMethod(mi.DeclaringType, typeBuilder, componentField);
-                CreateInvokeMethod(mi, typeBuilder, componentField, itype);
-            }
-            return typeBuilder.CreateType();
+            var className = $"P_{(uint)pi.DeclaringType.GetHashCode()}_{(uint)pi.GetHashCode()}";
+            var template = $@"
+using UnityEngine;
+namespace Surrogates {{
+    [System.Serializable]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public class {className} : ISurrogateProperty<{pi.PropertyType.Name}> {{
+        Component component;
+        public void SetComponent(Component component) => this.component = component;
+        public {pi.PropertyType.Name} Get() => component.{pi.Name};
+        public {pi.PropertyType.Name} Set({pi.PropertyType.Name} value) => component.{pi.Name} = value;
+    }}
+}}
+";
+            propertyIndex[className] = template;
+            return template;
         }
 
-        static void CreateInvokeMethod(MethodInfo mi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
+        public static string CreateAction(MethodInfo mi)
         {
-            var mb = typeBuilder.DefineMethod("Invoke", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), null);
-            var il = mb.GetILGenerator();
-            if (mi == null)
-            {
-                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
-                il.Emit(OpCodes.Throw);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, componentField);
-                il.Emit(OpCodes.Callvirt, mi);
-                il.Emit(OpCodes.Nop);
-                il.Emit(OpCodes.Ret);
-            }
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Invoke"));
+            var className = $"{mi.DeclaringType.Name}_{mi.Name}";
+            var template = $@"
+    [System.Serializable]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public class {className} : ISurrogateAction {{
+        Component component;
+        public void SetComponent(Component component) => this.component = component;
+        public void Invoke() => component.{mi.Name}();
+    }}
+            ";
+            // methodIndex[mi] = template;
+            return template;
         }
 
-        static void CreateStaticInvokeMethod(MethodInfo mi, TypeBuilder typeBuilder, Type itype)
+        public static string CreateAction(MethodInfo mi, ParameterInfo[] parameters)
         {
-            var mb = typeBuilder.DefineMethod("Invoke", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), null);
-            var il = mb.GetILGenerator();
-            if (mi == null)
-            {
-                il.Emit(OpCodes.Newobj, typeof(System.NotImplementedException));
-                il.Emit(OpCodes.Throw);
-            }
-            else
-            {
-                il.Emit(OpCodes.Nop);
-                il.Emit(OpCodes.Call, mi);
-                il.Emit(OpCodes.Ret);
-            }
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Invoke"));
+            var className = $"{mi.DeclaringType.Name}_{mi.Name}_{(uint)string.Join("_", (from i in parameters select i.ParameterType.Name)).GetHashCode()}";
+            var fields = string.Join("            \n", (from i in parameters select $"public {i.ParameterType.Name} {i.Name};"));
+            var arguments = string.Join(", ", (from i in parameters select $"{i.Name}"));
+            var template = $@"
+    [System.Serializable]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public class {className} : ISurrogateAction {{
+        Component component;
+        {fields}
+        public void SetComponent(Component component) => this.component = component;
+        public void Invoke() => component.{mi.Name}({arguments});
+    }}
+            ";
+            // methodIndex[mi] = template;
+            return template;
         }
 
-        static void CreateActionRegisterMethod(Type declaringType, string name, TypeBuilder typeBuilder)
+        public static string CreateAction(Type returnType, MethodInfo mi, ParameterInfo[] parameters)
         {
-            var mb = typeBuilder.DefineMethod("AddToRegister", MethodAttributes.Static, typeof(void), null);
-            var ctorParams = new Type[] { typeof(RuntimeInitializeLoadType) };
-            var classCtorInfo = typeof(RuntimeInitializeOnLoadMethodAttribute).GetConstructor(ctorParams);
-            var cab = new CustomAttributeBuilder(classCtorInfo, new object[] { RuntimeInitializeLoadType.BeforeSceneLoad });
-            mb.SetCustomAttribute(cab);
-            var il = mb.GetILGenerator();
-            il.Emit(OpCodes.Ldtoken, declaringType);
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
-            il.Emit(OpCodes.Ldstr, name);
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Newarr, typeof(System.Type));
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetMethod", new Type[] { typeof(string), typeof(Type[]) }));
-            il.Emit(OpCodes.Ldtoken, typeBuilder);
-            il.Emit(OpCodes.Call, typeof(System.Type).GetMethod("GetTypeFromHandle"));
-            il.Emit(OpCodes.Call, typeof(SurrogateRegister).GetMethod("SetSurrogate", new[] { typeof(MethodInfo), typeof(Type) }));
-            il.Emit(OpCodes.Ret);
+            var className = $"{mi.DeclaringType.Name}_{mi.Name}_{(uint)string.Join("_", (from i in parameters select i.ParameterType.Name)).GetHashCode()}";
+            var fields = string.Join("            \n", (from i in parameters select $"public {i.ParameterType.Name} {i.Name};"));
+            var arguments = string.Join(", ", (from i in parameters select $"{i.Name}"));
+            var template = $@"
+    [System.Serializable]
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    public class {className} : ISurrogateAction<{returnType.Name}> {{
+        Component component;
+        {fields}
+        public void SetComponent(Component component) => this.component = component;
+        public {returnType.Name} Invoke() => component.{mi.Name}({arguments});
+    }}
+            ";
+            // methodIndex[mi] = template;
+            return template;
         }
 
-        static void CreateSetMethod(FieldInfo fi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
-        {
-            var mb = typeBuilder.DefineMethod("Set", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, typeof(void), new Type[] { fi.FieldType });
-
-            var il = mb.GetILGenerator();
-            if (fi.IsStatic)
-            {
-                il.Emit(OpCodes.Ldarg_1);
-                il.Emit(OpCodes.Stsfld, fi);
-                il.Emit(OpCodes.Ret);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, componentField);
-                il.Emit(OpCodes.Ldarg_1);
-                il.Emit(OpCodes.Stfld, fi);
-                il.Emit(OpCodes.Ret);
-            }
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Set"));
-        }
-
-        static void CreateGetMethod(FieldInfo fi, TypeBuilder typeBuilder, FieldBuilder componentField, Type itype)
-        {
-            var mb = typeBuilder.DefineMethod("Get", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.Standard, fi.FieldType, null);
-            var il = mb.GetILGenerator();
-
-            if (fi.IsStatic)
-            {
-                il.Emit(OpCodes.Ldsfld, fi);
-                il.Emit(OpCodes.Ret);
-            }
-            else
-            {
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldfld, componentField);
-                il.Emit(OpCodes.Ldfld, fi);
-                il.Emit(OpCodes.Ret);
-            }
-
-            typeBuilder.DefineMethodOverride(mb, itype.GetMethod("Get"));
-        }
     }
 }

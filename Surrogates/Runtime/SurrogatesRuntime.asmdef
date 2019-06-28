@@ -1,6 +1,8 @@
 {
     "name": "SurrogatesRuntime",
-    "references": [],
+    "references": [
+        "GUID:5061b7b6dbfc34fdf8620d8b9392d718"
+    ],
     "optionalUnityReferences": [],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -6,4 +6,9 @@ namespace Surrogates
     {
         void Invoke();
     }
+
+    public interface ISurrogateAction<T> : ISurrogate
+    {
+        T Invoke();
+    }
 }

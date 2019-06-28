@@ -6,33 +6,37 @@ namespace Surrogates
 {
     public class DefaultSurrogateAction : ISurrogateAction
     {
-        MethodInfo _methodInfo;
-        Component _component;
-        Type _type;
+        public MethodInfo methodInfo;
+        public Component component;
+        public GameObject gameObject;
+        public object[] args = new object[0];
+        public Type type;
 
         public DefaultSurrogateAction(Component target, MethodInfo propertyInfo)
         {
-            _component = target;
-            _methodInfo = propertyInfo;
+            component = target;
+            methodInfo = propertyInfo;
         }
 
         public DefaultSurrogateAction(Type type, MethodInfo methodInfo)
         {
-            _type = type;
-            _methodInfo = methodInfo;
+            this.type = type;
+            this.methodInfo = methodInfo;
         }
 
         public void Invoke()
         {
-            if (_component != null)
-                _methodInfo.Invoke(_component, null);
+            if (component != null)
+                methodInfo.Invoke(component, args);
+            else if (gameObject != null)
+                methodInfo.Invoke(gameObject, args);
             else
-                _methodInfo.Invoke(null, null);
+                methodInfo.Invoke(null, args);
         }
 
         public void SetComponent(Component component)
         {
-            _component = component;
+            this.component = component;
         }
     }
 }
